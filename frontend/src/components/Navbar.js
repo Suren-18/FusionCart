@@ -16,7 +16,7 @@ const Navbar = () => {
   return (
     <nav className="navbar">
       <div className="container navbar-content">
-        <Link to="/" className="logo">ShopHub</Link>
+        <Link to="/" className="logo">FusionCart</Link>
         
         <SearchBar />
 

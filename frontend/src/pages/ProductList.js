@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ProductCard from '../components/ProductCard';
 import FilterPanel from '../components/FilterPanel';
-import SearchBar from '../components/SearchBar';
 import api from '../services/api';
 
 const ProductList = () => {
@@ -84,12 +83,6 @@ const ProductList = () => {
     updateURLParams(updatedFilters);
   };
 
-  const handleSearch = (searchTerm) => {
-    const updatedFilters = { ...filters, search: searchTerm, page: '1' };
-    setFilters(updatedFilters);
-    updateURLParams(updatedFilters);
-  };
-
   const handlePageChange = (newPage) => {
     const updatedFilters = { ...filters, page: newPage.toString() };
     setFilters(updatedFilters);
@@ -99,8 +92,6 @@ const ProductList = () => {
 
   return (
     <div>
-      <SearchBar onSearch={handleSearch} />
-      
       {error && (
         <div className="error" style={{ marginBottom: '20px' }}>
           {error}
