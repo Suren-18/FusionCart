@@ -29,38 +29,54 @@ exports.getAllProducts = async (req, res) => {
       if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
     }
     
-    if (minRating) filter.rating = { $gte: parseFloat(minRating) };
+    if (minRating) filter.averageRating = { $gte: parseFloat(minRating) };
     if (inStock === 'true') filter.stock = { $gt: 0 };
-    if (search) filter.$text = { $search: search };
+    
+    // Text search - using $text index
+    if (search && search.trim()) {
+      filter.$text = { $search: search.trim() };
+    }
 
     // Sorting
     let sortOption = {};
-    switch (sort) {
-      case 'price_asc':
-        sortOption = { price: 1 };
-        break;
-      case 'price_desc':
-        sortOption = { price: -1 };
-        break;
-      case 'rating':
-        sortOption = { rating: -1, numReviews: -1 };
-        break;
-      case 'newest':
-        sortOption = { createdAt: -1 };
-        break;
-      case 'popular':
-        sortOption = { numReviews: -1, rating: -1 };
-        break;
-      default:
-        sortOption = { createdAt: -1 };
+    
+    // If searching, sort by text score first
+    if (search && search.trim()) {
+      sortOption = { score: { $meta: "textScore" } };
+    } else {
+      switch (sort) {
+        case 'price_asc':
+          sortOption = { price: 1 };
+          break;
+        case 'price_desc':
+          sortOption = { price: -1 };
+          break;
+        case 'rating':
+          sortOption = { averageRating: -1, totalReviews: -1 };
+          break;
+        case 'newest':
+          sortOption = { createdAt: -1 };
+          break;
+        case 'popular':
+          sortOption = { totalReviews: -1, averageRating: -1 };
+          break;
+        default:
+          sortOption = { createdAt: -1 };
+      }
     }
 
     // Pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const limitNum = parseInt(limit);
 
-    // Execute query
-    const products = await Product.find(filter)
+    // Execute query - add text score projection if searching
+    let query = Product.find(filter);
+    
+    if (search && search.trim()) {
+      query = query.select({ score: { $meta: "textScore" } });
+    }
+    
+    const products = await query
       .sort(sortOption)
       .limit(limitNum)
       .skip(skip)
@@ -171,7 +187,7 @@ exports.getBrands = async (req, res) => {
 exports.getPriceHistory = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
-      .select('priceHistory price name')
+      .select('priceHistory price ProductName')
       .lean();
     
     if (!product) {
@@ -193,7 +209,7 @@ exports.getPriceHistory = async (req, res) => {
 
     res.json({
       success: true,
-      productName: product.name,
+      productName: product.ProductName,
       currentPrice: product.price,
       history
     });
@@ -211,7 +227,7 @@ exports.searchProducts = async (req, res) => {
   try {
     const { q, limit = 10 } = req.query;
 
-    if (!q) {
+    if (!q || !q.trim()) {
       return res.json({
         success: true,
         products: []
@@ -219,11 +235,12 @@ exports.searchProducts = async (req, res) => {
     }
 
     const products = await Product.find(
-      { $text: { $search: q } },
+      { $text: { $search: q.trim() } },
       { score: { $meta: "textScore" } }
     )
     .sort({ score: { $meta: "textScore" } })
     .limit(parseInt(limit))
+    .select('ProductName ProductDescription price image_link category brand averageRating')
     .lean();
 
     res.json({
@@ -235,6 +252,47 @@ exports.searchProducts = async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: 'Search failed', 
+      error: error.message 
+    });
+  }
+};
+
+// New function for search suggestions
+exports.getSearchSuggestions = async (req, res) => {
+  try {
+    const { q, limit = 5 } = req.query;
+
+    if (!q || !q.trim()) {
+      return res.json({
+        success: true,
+        suggestions: []
+      });
+    }
+
+    const searchTerm = q.trim();
+
+    // Find products that match the search term
+    const products = await Product.find(
+      { $text: { $search: searchTerm } },
+      { score: { $meta: "textScore" } }
+    )
+    .sort({ score: { $meta: "textScore" } })
+    .limit(parseInt(limit))
+    .select('ProductName')
+    .lean();
+
+    // Extract product names as suggestions
+    const suggestions = products.map(p => p.ProductName);
+
+    res.json({
+      success: true,
+      suggestions
+    });
+  } catch (error) {
+    console.error('Error fetching suggestions:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch suggestions', 
       error: error.message 
     });
   }

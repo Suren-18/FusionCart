@@ -67,6 +67,7 @@ export const productAPI = {
   getAll: (params) => api.get('/products', { params }),
   getById: (id) => api.get(`/products/${id}`),
   search: (query) => api.get(`/products/search?q=${query}`),
+  searchSuggestions: (query) => api.get(`/products/suggestions?q=${query}`),
   create: (productData) => api.post('/products', productData),
   update: (id, productData) => api.put(`/products/${id}`, productData),
   delete: (id) => api.delete(`/products/${id}`),

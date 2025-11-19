@@ -29,10 +29,13 @@ const SearchBar = () => {
 
       try {
         const response = await productAPI.searchSuggestions(query);
-        setSuggestions(response.data);
-        setShowSuggestions(true);
+        // Extract suggestions array from response
+        const suggestionsData = response.data?.suggestions || [];
+        setSuggestions(suggestionsData);
+        setShowSuggestions(suggestionsData.length > 0);
       } catch (error) {
         console.error('Error fetching suggestions:', error);
+        setSuggestions([]);
       }
     };
 
@@ -42,7 +45,7 @@ const SearchBar = () => {
 
   const handleSearch = (searchQuery = query) => {
     if (searchQuery.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchQuery)}`);
+      navigate(`/products?search=${encodeURIComponent(searchQuery.trim())}`);
       setShowSuggestions(false);
       setQuery('');
     }
