@@ -106,33 +106,73 @@ exports.getAllProducts = async (req, res) => {
 
 exports.getProductById = async (req, res) => {
   try {
+    console.log('🔍 Fetching product with ID:', req.params.id);
+    
+    // Validate ObjectId format
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      console.log('❌ Invalid product ID format');
+      return res.status(400).json({ 
+        success: false,
+        message: 'Invalid product ID format' 
+      });
+    }
+
     const product = await Product.findById(req.params.id).lean();
     
     if (!product) {
+      console.log('❌ Product not found in database');
       return res.status(404).json({ 
         success: false,
         message: 'Product not found' 
       });
     }
 
-    // Fetch reviews
-    const reviews = await Review.find({ productId: product._id })
+    console.log('✅ Product found:', product.ProductName);
+
+    // Fetch reviews - handle both possible field names
+    let reviews = [];
+    try {
+      reviews = await Review.find({ 
+        $or: [
+          { productId: product._id },
+          { product: product._id }
+        ]
+      })
       .populate('userId', 'username')
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
+      
+      console.log(`📝 Found ${reviews.length} reviews`);
+    } catch (reviewError) {
+      console.error('⚠️ Error fetching reviews:', reviewError);
+      // Continue without reviews if there's an error
+    }
 
     // Get sentiment summary
-    const sentimentSummary = getReviewSentimentSummary(reviews);
+    let sentimentSummary = null;
+    try {
+      sentimentSummary = getReviewSentimentSummary(reviews);
+    } catch (sentimentError) {
+      console.error('⚠️ Error calculating sentiment:', sentimentError);
+    }
 
     // Fetch related products
-    const relatedProducts = await Product.find({
-      category: product.category,
-      _id: { $ne: product._id }
-    })
-    .limit(6)
-    .lean();
+    let relatedProducts = [];
+    try {
+      relatedProducts = await Product.find({
+        category: product.category,
+        _id: { $ne: product._id }
+      })
+      .limit(6)
+      .lean();
+      
+      console.log(`🔗 Found ${relatedProducts.length} related products`);
+    } catch (relatedError) {
+      console.error('⚠️ Error fetching related products:', relatedError);
+    }
 
+    console.log('✅ Sending product response');
     res.json({
       success: true,
       product,
@@ -141,7 +181,7 @@ exports.getProductById = async (req, res) => {
       relatedProducts
     });
   } catch (error) {
-    console.error('Error fetching product:', error);
+    console.error('❌ Error fetching product:', error);
     res.status(500).json({ 
       success: false,
       message: 'Failed to fetch product', 
@@ -186,6 +226,8 @@ exports.getBrands = async (req, res) => {
 
 exports.getPriceHistory = async (req, res) => {
   try {
+    console.log('📈 Fetching price history for product:', req.params.id);
+    
     const product = await Product.findById(req.params.id)
       .select('priceHistory price ProductName')
       .lean();
@@ -203,7 +245,7 @@ exports.getPriceHistory = async (req, res) => {
     if (history.length === 0) {
       history = [{
         price: product.price,
-        timestamp: new Date()
+        date: new Date()
       }];
     }
 

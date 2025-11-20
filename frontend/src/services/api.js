@@ -66,6 +66,8 @@ export const authAPI = {
 export const productAPI = {
   getAll: (params) => api.get('/products', { params }),
   getById: (id) => api.get(`/products/${id}`),
+  getProductById: (id) => api.get(`/products/${id}`),
+  getPriceHistory: (id) => api.get(`/products/${id}/price-history`),
   search: (query) => api.get(`/products/search?q=${query}`),
   searchSuggestions: (query) => api.get(`/products/suggestions?q=${query}`),
   create: (productData) => api.post('/products', productData),
@@ -77,8 +79,10 @@ export const productAPI = {
 export const reviewAPI = {
   getByProduct: (productId) => api.get(`/reviews/product/${productId}`),
   create: (reviewData) => api.post('/reviews', reviewData),
+  addReview: (reviewData) => api.post('/reviews', reviewData),
   update: (id, reviewData) => api.put(`/reviews/${id}`, reviewData),
   delete: (id) => api.delete(`/reviews/${id}`),
+  deleteReview: (id) => api.delete(`/reviews/${id}`),
   upvote: (id) => api.post(`/reviews/${id}/upvote`),
   downvote: (id) => api.post(`/reviews/${id}/downvote`),
 };
@@ -86,6 +90,7 @@ export const reviewAPI = {
 // Order API
 export const orderAPI = {
   create: (orderData) => api.post('/orders', orderData),
+  createOrder: (orderData) => api.post('/orders', orderData),
   getMyOrders: () => api.get('/orders/my-orders'),
   getById: (id) => api.get(`/orders/${id}`),
   addToCart: (productId, quantity) => api.post('/orders/cart', { productId, quantity }),

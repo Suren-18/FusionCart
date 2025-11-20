@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { productAPI, reviewAPI, orderAPI } from '../services/api';
 import ReviewCard from '../components/ReviewCard';
@@ -7,12 +7,14 @@ import ProductCard from '../components/ProductCard';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [sentimentSummary, setSentimentSummary] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, text: '' });
 
@@ -22,21 +24,58 @@ const ProductDetailPage = () => {
 
   const fetchProductData = async () => {
     try {
-      const [productRes, reviewsRes, sentimentRes, priceRes, relatedRes] = await Promise.all([
-        productAPI.getProductById(id),
-        reviewAPI.getProductReviews(id, { limit: 10 }),
-        reviewAPI.getSentimentSummary(id),
-        productAPI.getPriceHistory(id),
-        productAPI.getRelatedProducts(id)
-      ]);
+      setLoading(true);
+      setError(null);
+      
+      console.log('🔍 Fetching product with ID:', id);
+      
+      // Fetch main product data (includes reviews, sentiment, and related products)
+      const productRes = await productAPI.getById(id);
+      
+      console.log('📦 Product response:', productRes.data);
+      
+      // Handle different response structures
+      if (productRes.data) {
+        const data = productRes.data;
+        
+        // Check if response has success flag
+        if (data.success === false) {
+          setError(data.message || 'Product not found');
+          setProduct(null);
+          setLoading(false);
+          return;
+        }
+        
+        // Extract product data (handle both wrapped and direct responses)
+        const productData = data.product || data;
+        setProduct(productData);
+        setReviews(data.reviews || []);
+        setSentimentSummary(data.sentimentSummary || null);
+        setRelatedProducts(data.relatedProducts || []);
+      }
 
-      setProduct(productRes.data);
-      setReviews(reviewsRes.data.reviews);
-      setSentimentSummary(sentimentRes.data);
-      setPriceHistory(priceRes.data);
-      setRelatedProducts(relatedRes.data);
+      // Fetch price history separately
+      try {
+        const priceRes = await productAPI.getPriceHistory(id);
+        console.log('📈 Price history response:', priceRes.data);
+        
+        if (priceRes.data && priceRes.data.history) {
+          // Format price history for the chart
+          const formattedHistory = priceRes.data.history.map(item => ({
+            date: item.date || item.timestamp,
+            price: item.price
+          }));
+          setPriceHistory(formattedHistory);
+        }
+      } catch (priceError) {
+        console.error('⚠️ Error fetching price history:', priceError);
+        setPriceHistory([]);
+      }
+
     } catch (error) {
-      console.error('Error fetching product data:', error);
+      console.error('❌ Error fetching product data:', error);
+      setError(error.response?.data?.message || 'Failed to load product');
+      setProduct(null);
     } finally {
       setLoading(false);
     }
@@ -47,45 +86,67 @@ const ProductDetailPage = () => {
       const response = await orderAPI.createOrder({
         products: [{ productId: id, quantity: 1 }]
       });
-      alert(response.data.message);
+      if (response.data.success) {
+        alert(response.data.message || 'Order placed successfully!');
+      }
     } catch (error) {
-      alert('Purchase failed. Please try again.');
+      alert(error.response?.data?.message || 'Purchase failed. Please try again.');
     }
   };
 
   const handleSubmitReview = async (e) => {
     e.preventDefault();
     try {
-      await reviewAPI.addReview({
+      const response = await reviewAPI.create({
         productId: id,
         rating: reviewForm.rating,
         text: reviewForm.text
       });
-      setShowReviewForm(false);
-      setReviewForm({ rating: 5, text: '' });
-      fetchProductData();
+      
+      if (response.data.success || response.data) {
+        setShowReviewForm(false);
+        setReviewForm({ rating: 5, text: '' });
+        fetchProductData();
+        alert('Review submitted successfully!');
+      }
     } catch (error) {
-      alert('Failed to submit review');
+      alert(error.response?.data?.message || 'Failed to submit review');
     }
   };
 
   const handleDeleteReview = async (reviewId) => {
     if (window.confirm('Are you sure you want to delete this review?')) {
       try {
-        await reviewAPI.deleteReview(reviewId);
-        fetchProductData();
+        const response = await reviewAPI.delete(reviewId);
+        if (response.data.success || response.data) {
+          fetchProductData();
+          alert('Review deleted successfully');
+        }
       } catch (error) {
-        alert('Failed to delete review');
+        alert(error.response?.data?.message || 'Failed to delete review');
       }
     }
   };
 
   if (loading) {
-    return <div className="loading">Loading product...</div>;
+    return (
+      <div className="container" style={{ marginTop: '100px', textAlign: 'center' }}>
+        <div style={{ fontSize: '24px', color: '#666' }}>Loading product...</div>
+      </div>
+    );
   }
 
-  if (!product) {
-    return <div className="container text-center mt-20">Product not found</div>;
+  if (error || !product) {
+    return (
+      <div className="container" style={{ marginTop: '100px', textAlign: 'center' }}>
+        <div style={{ fontSize: '24px', color: '#666', marginBottom: '20px' }}>
+          {error || 'Product not found'}
+        </div>
+        <button onClick={() => navigate('/products')} className="btn btn-primary">
+          Go to Products
+        </button>
+      </div>
+    );
   }
 
   return (
@@ -115,18 +176,35 @@ const ProductDetailPage = () => {
             </div>
           </div>
 
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '10px' }}>
+              <strong>Category:</strong> {product.category || 'N/A'}
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <strong>Brand:</strong> {product.brand || 'N/A'}
+            </div>
+            <div style={{ marginBottom: '10px' }}>
+              <strong>Stock:</strong> {product.stock > 0 ? `${product.stock} available` : 'Out of stock'}
+            </div>
+          </div>
+
           <div style={{ marginBottom: '30px', padding: '15px', background: '#f9f9f9', borderRadius: '8px' }}>
             <h3 style={{ marginBottom: '10px' }}>Description</h3>
             <p style={{ lineHeight: '1.6', whiteSpace: 'pre-line' }}>{product.ProductDescription}</p>
           </div>
 
-          <button onClick={handleBuyNow} className="btn btn-primary" style={{ width: '100%', padding: '15px', fontSize: '18px' }}>
-            Buy Now
+          <button 
+            onClick={handleBuyNow} 
+            className="btn btn-primary" 
+            style={{ width: '100%', padding: '15px', fontSize: '18px' }}
+            disabled={product.stock === 0}
+          >
+            {product.stock > 0 ? 'Buy Now' : 'Out of Stock'}
           </button>
         </div>
       </div>
 
-      {priceHistory && priceHistory.length > 0 && (
+      {priceHistory && priceHistory.length > 1 && (
         <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '40px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
           <h2 style={{ marginBottom: '20px' }}>Price History</h2>
           <ResponsiveContainer width="100%" height={300}>
@@ -162,8 +240,8 @@ const ProductDetailPage = () => {
       )}
 
       <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '40px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-        <div className="flex-between mb-20">
-          <h2>Customer Reviews</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0 }}>Customer Reviews</h2>
           <button onClick={() => setShowReviewForm(!showReviewForm)} className="btn btn-primary">
             Write a Review
           </button>
@@ -171,10 +249,10 @@ const ProductDetailPage = () => {
 
         {showReviewForm && (
           <form onSubmit={handleSubmitReview} style={{ marginBottom: '30px', padding: '20px', background: '#f9f9f9', borderRadius: '8px' }}>
-            <div className="form-group">
-              <label>Rating</label>
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Rating</label>
               <select
-                className="form-control"
+                style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
                 value={reviewForm.rating}
                 onChange={(e) => setReviewForm({ ...reviewForm, rating: Number(e.target.value) })}
               >
@@ -183,10 +261,10 @@ const ProductDetailPage = () => {
                 ))}
               </select>
             </div>
-            <div className="form-group">
-              <label>Review</label>
+            <div style={{ marginBottom: '15px' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Review</label>
               <textarea
-                className="form-control"
+                style={{ width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ddd', resize: 'vertical' }}
                 rows="4"
                 value={reviewForm.text}
                 onChange={(e) => setReviewForm({ ...reviewForm, text: e.target.value })}
@@ -214,8 +292,8 @@ const ProductDetailPage = () => {
         <div style={{ marginBottom: '40px' }}>
           <h2 style={{ marginBottom: '20px' }}>Related Products</h2>
           <div className="product-grid">
-            {relatedProducts.map(product => (
-              <ProductCard key={product._id} product={product} />
+            {relatedProducts.map(prod => (
+              <ProductCard key={prod._id} product={prod} />
             ))}
           </div>
         </div>
