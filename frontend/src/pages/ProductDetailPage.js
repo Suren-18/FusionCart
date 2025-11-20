@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { productAPI, reviewAPI, orderAPI } from '../services/api';
 import ReviewCard from '../components/ReviewCard';
 import ProductCard from '../components/ProductCard';
+import PriceHistoryChart from '../components/PriceHistoryChart';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -204,20 +204,11 @@ const ProductDetailPage = () => {
         </div>
       </div>
 
-      {priceHistory && priceHistory.length > 1 && (
-        <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '40px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-          <h2 style={{ marginBottom: '20px' }}>Price History</h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={priceHistory}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" tickFormatter={(date) => new Date(date).toLocaleDateString()} />
-              <YAxis />
-              <Tooltip labelFormatter={(date) => new Date(date).toLocaleDateString()} />
-              <Line type="monotone" dataKey="price" stroke="#000" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {/* Price History Chart */}
+      <PriceHistoryChart 
+        priceHistory={priceHistory} 
+        currentPrice={product.price}
+      />
 
       {sentimentSummary && (
         <div style={{ background: '#fff', padding: '20px', borderRadius: '8px', marginBottom: '40px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
